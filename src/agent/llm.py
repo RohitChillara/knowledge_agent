@@ -27,9 +27,8 @@ client=Groq(api_key=os.environ.get("OPENAI_API_KEY"))
 class Triple(BaseModel):
     model_config = ConfigDict(extra="forbid")
     subject: str
-    relation_type: str
+    predicate: str
     object: str
-    qualifiers: list
     source_span: str
 
 class ExtractionResult(BaseModel):
@@ -40,50 +39,55 @@ class ExtractionResult(BaseModel):
 
 
 class Model:
-    SYSTEM_INSTRUCTIONS_PRIMARY = """You are extracting factual relationships from a document for a knowledge graph.
+    SYSTEM_INSTRUCTIONS = """You are extracting factual relationships from a document for a knowledge graph.
     Your only job is to identify what the text explicitly states — not what is
     likely true, not what you already know, not what would complete the picture.
 
     Each fact you extract has this shape:
     - subject
-    - relation_type (from the allowed list below)
+    - subject_type (from the allowed entity types below)
+    - predicate (from the allowed predicates below)
     - object
-    - qualifiers: a list of additional key-value details that belong to THIS
-    specific fact, if the text provides any
+    - object_type (from the allowed entity types below)
     - source_span: the exact sentence or clause that supports this fact
 
     Rules:
 
-    1. GROUNDING: Every fact you extract — including every qualifier — must be
-    directly and explicitly stated in the provided text. Do not use outside
-    knowledge, do not infer unstated facts, and do not fill in plausible-
-    sounding details (dates, locations, quantities) that the text does not
-    contain. If a fact seems true but isn't stated, leave it out.
+    1. GROUNDING: Every fact you extract must be directly and explicitly stated
+    in the provided text. Do not use outside knowledge, do not infer unstated
+    facts, and do not fill in plausible-sounding details (dates, locations,
+    quantities) that the text does not contain. If a fact seems true but
+    isn't stated, leave it out.
 
     2. EVIDENCE: For every fact, quote the exact sentence or clause from the
     source text that supports it, verbatim, in the source_span field. If you
     cannot find a literal sentence to quote, you cannot extract the fact.
 
-    3. VOCABULARY: Use only relation_type values from this list: {allowed_predicates}
-    Do not invent new relation types. If a real relationship in the text
-    doesn't fit any type on this list, omit it rather than force it into the
-    wrong category.
+    3. PREDICATE VOCABULARY: Use only predicate values from this list:
+    {allowed_predicates}
+    Do not invent new predicates. If a real relationship in the text doesn't
+    fit any value on this list, omit it rather than force it into the wrong
+    category.
 
-    4. ENTITY NAMING: Use the same, consistent name for an entity every time it
+    4. ENTITY TYPE VOCABULARY: Use only subject_type/object_type values from
+    this list: {allowed_entity_types}
+    Every entity must be assigned exactly one type from this list. Do not
+    invent new types.
+
+    5. ENTITY NAMING: Use the same, consistent name for an entity every time it
     appears, even if the text refers to it differently (e.g. "the University"
-    vs. its full name) — pick one canonical form and use it throughout.
+    vs. its full name) — pick one canonical form and use it throughout. This
+    is critical: two facts only connect into a chain if they use the exact
+    same name for the shared entity.
 
-    5. QUALIFIER BUNDLING: If a sentence gives additional context about a fact —
-    which institution, which location, what quantity, what date, what role —
-    attach that context as a qualifier ON that same fact. Do not split one
-    real-world fact into two separate, disconnected facts that each hold half
-    the information. A fact and its context belong together every time, not
-    only when convenient.
-
-    6. NO EMPTY QUALIFIERS FROM GUESSING: Only add a qualifier if the text
-    actually states it. An empty qualifiers list is correct and expected when
-    the text gives no extra context — do not invent a qualifier just to fill
-    the field.
+    6. CHAIN, DON'T QUALIFY: There are no qualifiers or extra properties in this
+    schema. If a fact has additional context (which institution, which
+    location, what role), express that context as a SEPARATE fact whose
+    subject is the object of the first fact. Example: instead of attaching
+    "institution: X" to a degree fact, extract a second fact stating that the
+    degree's object connects to X directly, using the degree as the new
+    subject. Every piece of stated context must become its own linked fact,
+    not be dropped and not be bundled onto another fact.
 
     7. OMISSION OVER INVENTION: When in doubt about whether something is stated
     clearly enough to extract, do not extract it. An incomplete but accurate
@@ -93,46 +97,49 @@ class Model:
     VERIFICATION_INSTRUCTIONS = """You are reviewing and correcting a first-pass extraction of facts from a
     document for a knowledge graph. You are given the original source text and
     the facts already extracted from it. Your job is not to extract from
-    scratch — it is to find and fix two specific problems in what's already
-    there.
+    scratch — it is to find and fix problems in what's already there.
 
     Each fact has this shape:
-    - subject
-    - relation_type (from the allowed list below)
-    - object
-    - qualifiers: a list of additional key-value details belonging to this fact
-    - source_span: the exact sentence or clause that supports this fact
+    - subject / subject_type
+    - predicate
+    - object / object_type
+    - source_span
 
     Rules:
 
-    1. FIND FRAGMENTED FACTS: If two or more extracted facts share the same
-    source_span and the same subject, check whether they actually describe
-    ONE real-world fact that was incorrectly split apart. If so, merge them
-    into a single fact, moving the split-off information into qualifiers.
-    Do not merge facts that are genuinely separate, even if they share a
-    source_span.
+    1. FIND BROKEN CHAINS: This schema has no qualifiers — context is expressed
+    by chaining facts through a shared entity (the object of one fact becomes
+    the subject of the next). Check whether every fact that should chain to
+    further context actually has that next link present. If the text states
+    context for a fact (an institution, a location, a role) and no fact
+    carries that context forward as its own subject, this is a missing link,
+    not an acceptable gap.
 
     2. FIND MISSING FACTS: Re-read the source text directly, not just the
-    extracted facts. For each relation_type in the allowed list, check
-    whether the text supports a fact of that type that is not present in
-    the extracted set. If you find one, add it — but only if you can quote
-    a literal source_span for it. Do not add anything you cannot ground in
-    the text.
+    extracted facts. For each predicate in the allowed list, check whether
+    the text supports a fact of that type, involving entities already in the
+    extracted set, that is not present. If you find one, add it — but only if
+    you can quote a literal source_span for it.
 
-    3. GROUNDING STILL APPLIES: Every fact you add or modify must have a real,
+    3. CHECK ENTITY NAME CONSISTENCY: If the same real-world entity appears
+    under two different names across facts, this breaks the chain between
+    them. Normalize to one consistent name across all facts referring to the
+    same entity.
+
+    4. GROUNDING STILL APPLIES: Every fact you add or modify must have a real,
     verbatim source_span from the original text. This review pass is not
-    exempt from that rule — invented or paraphrased spans are not allowed
-    here either.
+    exempt from that rule.
 
-    4. VOCABULARY: Use only relation_type values from this list: {allowed_predicates}
-    Do not invent new relation types, including when adding missing facts.
+    5. VOCABULARY: Use only predicate values from {allowed_predicates} and
+    subject_type/object_type values from {allowed_entity_types}. Do not
+    invent new values, including when adding missing facts.
 
-    5. DO NOT TOUCH WHAT'S ALREADY CORRECT: If a fact is already accurate,
-    complete, and properly grounded, leave it exactly as it is. Your job is
-    to fix specific problems, not to regenerate or rephrase everything.
+    6. DO NOT TOUCH WHAT'S ALREADY CORRECT: If a fact is already accurate,
+    complete, and properly grounded, leave it exactly as it is.
 
-    6. RETURN THE COMPLETE SET: Your output must be the full, corrected list of
+    7. RETURN THE COMPLETE SET: Your output must be the full, corrected list of
     facts — not just the facts you changed or added."""
+
 
 
     def __init__(self,prompt):
