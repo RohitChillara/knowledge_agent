@@ -8,6 +8,7 @@ class Extraction:
 
     def triple_extraction(self):
         doc=Extraction.nlp(self.text)
+        triples=list()
         for token in doc:
             subject_tokens=set()
             subjects=set()
@@ -21,25 +22,34 @@ class Extraction:
                                 subject=ent.text
                         subjects.add(subject)
                         subject_tokens.add(child)
-                if subject==None and token.dep_=="relcl":
-                        subject=token.head
-                        for ent in doc.ents:
-                            if(ent.start<=child.i and ent.end>child.i):
-                                subject=ent.text
 
-                for child in token.children:
-                    if child.dep_ in ("prep","dobj", "attr"):
-                        print(token.lemma_,child.text)
+                if subject==None and token.dep_=="relcl":
+                        head=token.head
+                        subject=head.text
+                        for ent in doc.ents:
+                            if(ent.start<=head.i and ent.end>head.i):
+                                subject=ent.text
+                                break
+                        subjects.add(subject)
+                        subject_tokens.add(token)
+
+                if(subjects!=None):
+                    print(token.lemma_,subjects)
+
+                # for child in token.children:
+                #     if child.dep_ in ("prep","dobj", "attr"):
+                #         # print(token.lemma_,child.text)
 
                                               
-                   
+        # def subject_chain(self,token):
+
                
 
 
     def test(self):
         doc = Extraction.nlp(self.text)
         for token in doc:
-            print("dep ->"+ str(token.dep_)+" head->"+str(token.head)+" head pos->"+str(token.head.pos_))
+            print(token,token.dep_,token.head)
 
 
 
@@ -58,7 +68,7 @@ if __name__=='__main__':
     lab's director.
     """
 
-    test5=""""Santos, who leads the research group, worked at Stanford."""
+    test5="""Rohit and friends, Karthaveer and Manish submitted a paper which was written by Rohit"""
     obj=Extraction(test5)
-    #obj.triple_extraction()
+    # obj.triple_extraction()
     obj.test()
