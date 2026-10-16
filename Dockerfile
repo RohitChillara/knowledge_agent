@@ -1,4 +1,4 @@
-FROM python:3.14-slim-onbuild
+FROM python:3.14-slim
 COPY --from=docker.io/astral/uv:latest /uv /uvx /bin/
 
 WORKDIR /agent
