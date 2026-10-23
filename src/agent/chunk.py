@@ -2,15 +2,19 @@ from pathlib import Path
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from enum import Enum
 from langchain_experimental.text_splitter import SemanticChunker
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from pypdf import PdfReader
+import os
+from dotenv import load_dotenv
+from typing import Literal
 
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="Qwen/Qwen3-Embedding-0.6B",
-    encode_kwargs={"normalize_embeddings": True},
-)
-CHUNK_SIZE = 4000
+load_dotenv()
+embeddings = OpenAIEmbeddings(api_key=os.environ["OPENAI_API_KEY"], model="text-embedding-3-small")
+
+
+
+CHUNK_SIZE = 2000
 CHUNK_OVERLAP = 200  # keeps a fact from being split exactly at a chunk boundary
 SUPPORTED = (".txt", ".pdf")
 
@@ -36,33 +40,22 @@ def load_pdf(path: Path) -> str:
 
 
 def chunk_prose(text: str) -> list[str]:
+    print("Using Recursive")
     return text_splitter.split_text(text)
 
 
 
-def chunking(path: Path, chunking_type : chunking_types=chunking_types.Semantic) -> list[str]:
-    path = Path(path)
-    if not path.is_file():
-        raise FileNotFoundError(f"No such file: {path}")
-    extension = path.suffix.lower()
+def chunking(document: str, chunking_type : Literal["Recursive","Semantic"]) -> list[str]:
+
+    if chunking_types(chunking_type)==chunking_types.Recursive:
+        return chunk_prose(document)
+        
+    elif chunking_types(chunking_type)==chunking_types.Semantic:
+        semantic_splitter=SemanticChunker(embeddings=embeddings,breakpoint_threshold_type="percentile",min_chunk_size=4000)
+        document=semantic_splitter.split_text(document)
+        return document
     
-    if extension == ".txt":
-        text = load_text(path)
-    elif extension == ".pdf":
-        text = load_pdf(path)
     else:
         raise ValueError(
-            f"Unsupported file type '{extension}'. Supported: {', '.join(SUPPORTED)}"
+            f"Invalid Chunking Method. Supported: Recursive, Semantic"
         )
-    if not text.strip():
-        raise ValueError(f"No text could be extracted from {path} (scanned PDF or empty file?)")
-
-    
-
-    if chunking_type==chunking_types.Recursive:
-        return chunk_prose(text)
-        
-    else:
-        semantic_splitter=SemanticChunker(embeddings=embeddings,breakpoint_threshold_type="percentile",min_chunk_size=4000)
-        document=semantic_splitter.split_text(text)
-        return document
