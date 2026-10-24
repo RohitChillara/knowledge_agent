@@ -40,7 +40,6 @@ def load_pdf(path: Path) -> str:
 
 
 def chunk_prose(text: str) -> list[str]:
-    print("Using Recursive")
     return text_splitter.split_text(text)
 
 
