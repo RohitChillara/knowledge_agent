@@ -26,23 +26,47 @@ class Graph:
         self.driver = self.db.connect()
         self.NodeLable = Literal["SourceDocument", "Chunk", "Entity"]
 
-    def create(self, text: str, node_id: str,props: Optional[dict], type: Literal["SourceDocument", "Chunk", "Entity"]):
+    def execute(self, type: Literal["SourceDocument", "Chunk", "Entity", "Connect"],
+            node_id: Optional[str] = None, props: Optional[dict] = None,
+            source_label: Optional[str] = None, rel: Optional[str] = None,
+            target_label: Optional[str] = None, source_id: Optional[str] = None,
+            target_id: Optional[str] = None):
 
-        if type not in get_args(self.NodeLable):
-            raise ValueError(f"unknown node label: {type!r}")
+        if type not in get_args(self.NodeLable) and type != "Connect":
+            raise ValueError(f"unknown type label: {type!r}")
 
         if type == "SourceDocument":
             query = queries.create_node_query(type)
-            print(query)
-
+            params = {"id":node_id, "props":props or {}}
+            
         elif type == "Chunk":
             query = queries.create_node_query(type)
+            params = {"id":node_id, "props":props or {}}
 
         elif type == "Entity":
             query = queries.create_node_query(type)
+            params = {"id":node_id, "props":props or {}}
+
+        elif type == "Connect":
+            if source_label is None or target_label is None:
+                raise ValueError("Missing source or target label")
+            if source_id is None or target_id is None:
+                raise ValueError("Missing source or target ids")
+            if rel is None or rel not in queries.REL_TYPES:
+                raise ValueError(
+                    f"Missing or invalid relationship type. "
+                    f"Expected one of {queries.REL_TYPES!r}, received {rel!r}"
+                )
+
+            query = queries.connect_query(source_label=source_label,rel=rel,target_label=target_label)
+            params={
+                "source_id":source_id,
+                "target_id":target_id,
+                "props": props or {}
+            }
 
 
-        self.driver.execute_query(query, id = node_id, props = props or {}, database_="knowledge") 
+        self.driver.execute_query(query, parameters_=params, database_="knowledge") 
 
 
 

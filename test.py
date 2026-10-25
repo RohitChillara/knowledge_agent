@@ -7,5 +7,9 @@ path = Path("/home/rohitchillara/agent/vw_emissions_excerpt.txt")
 document = chunk.load_text(path=path)
 
 sample = kg(document)
+sample.create_graph()
 
 
+# from agent import queries
+
+# print(queries.REL_TYPES)
