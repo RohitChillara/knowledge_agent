@@ -14,8 +14,8 @@ embeddings = OpenAIEmbeddings(api_key=os.environ["OPENAI_API_KEY"], model="text-
 
 
 
-CHUNK_SIZE = 2000
-CHUNK_OVERLAP = 200  # keeps a fact from being split exactly at a chunk boundary
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 50  # keeps a fact from being split exactly at a chunk boundary
 SUPPORTED = (".txt", ".pdf")
 
 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(

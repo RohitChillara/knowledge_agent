@@ -10,13 +10,10 @@ load_dotenv()
 
 class LLM:
     def __init__(self):
-        try:
-            self.client=Groq(api_key=os.environ["GROQ_API_KEY"])
 
-        except groq.AuthenticationError as e:
-            raise RuntimeError("Invalid Groq API key") from e
+        self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-    def send[T:BaseModel](self,prompt:str,system_instructions:str,schema:T)->T:
+    def send[T: BaseModel](self, prompt: str, system_instructions: str, schema: type[T]) -> T:
         try:
             response=self.client.chat.completions.create(
                 messages=[
@@ -36,15 +33,17 @@ class LLM:
                     "json_schema":{
                     "strict":True,
                     "name":schema.__name__,
+                    "schema":schema.model_json_schema(),
                     "additionalProperties":False
                     }
                 }
 
             )
 
-            result = json.loads(response.choices[0].message.content or "{}")
-            validation=schema.model_validate(result)
-            return validation
+            content = response.choices[0].message.content
+            if not content:
+                raise RuntimeError("empty response")
+            return schema.model_validate_json(content)
 
         except (groq.RateLimitError, groq.APIConnectionError) as e:
             raise RuntimeError(f"Transient Groq error, retry: {e}") from e

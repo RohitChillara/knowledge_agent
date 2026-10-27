@@ -24,7 +24,7 @@ class Graph:
     def __init__(self):
         self.db = Connection()
         self.driver = self.db.connect()
-        self.NodeLable = Literal["SourceDocument", "Chunk", "Entity"]
+        self.NodeLable = Literal["SourceDocument", "Chunk", "Entity","Connect"]
 
     def execute(self, type: Literal["SourceDocument", "Chunk", "Entity", "Connect"],
             node_id: Optional[str] = None, props: Optional[dict] = None,
@@ -32,7 +32,7 @@ class Graph:
             target_label: Optional[str] = None, source_id: Optional[str] = None,
             target_id: Optional[str] = None):
 
-        if type not in get_args(self.NodeLable) and type != "Connect":
+        if type not in get_args(self.NodeLable):
             raise ValueError(f"unknown type label: {type!r}")
 
         if type == "SourceDocument":
@@ -64,7 +64,7 @@ class Graph:
                 "target_id":target_id,
                 "props": props or {}
             }
-
+            
 
         self.driver.execute_query(query, parameters_=params, database_="knowledge") 
 
