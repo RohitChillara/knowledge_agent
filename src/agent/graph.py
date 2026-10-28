@@ -66,7 +66,7 @@ class Graph:
             }
             
 
-        self.driver.execute_query(query, parameters_=params, database_="knowledge") 
+        self.driver.execute_query(query, parameters_=params, database_="neo4j") 
 
 
 
