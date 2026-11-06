@@ -28,23 +28,36 @@ class KG_Generator:
     def create_graph(self):
         pieces = self.chunks()
         chunks_id = list()
-        # for index,piece in enumerate(pieces, start=1):
-        #     #entities = self.entity_extraction(piece)
-        #     chunk_id = f"{self.doc_id}:{index}"
-        #     chunks_id.append(chunk_id)
-        #     self.kg.execute(node_id=chunk_id, props={"ChunkText": piece},type="Chunk")
-        #     self.connect(source_label="Chunk",target_label="SourceDocument",source_id=chunk_id,
-        #                  target_id=self.doc_id,rel="PART_OF")
-        #     if(index>1):
-        #         self.connect(source_label="Chunk",target_label="Chunk",source_id=chunks_id[index-2],
-        #                                  target_id=chunk_id,rel="NEXT_CHUNK")
+        for index,piece in enumerate(pieces, start=1):
+            entities = self.entity_extraction(piece)
+            chunk_id = f"{self.doc_id}:{index}"
+            chunks_id.append(chunk_id)
+            self.kg.execute(node_id=chunk_id, props={"ChunkText": piece},type="Chunk")
+            self.connect(source_label="Chunk",target_label="SourceDocument",source_id=chunk_id,
+                         target_id=self.doc_id,rel="PART_OF")
+            if(index>1):
+                self.connect(source_label="Chunk",target_label="Chunk",source_id=chunks_id[index-2],
+                                         target_id=chunk_id,rel="NEXT_CHUNK")
+            self.add_entity(entities,chunk_id)
+            time.sleep(5)
     
-        with open("review.txt","w",encoding="utf-8") as f:
-            for i in range(5):
-                entities = self.entity_extraction(pieces[i])
-                f.write(f"=== chunk {i} ===\n{pieces[i]}\n\n{entities}\n\n")
-                time.sleep(5)
+        # with open("review.txt","w",encoding="utf-8") as f:
+        #     for i in range(2):
+        #         entities = self.entity_extraction(pieces[i])
+        #         for e in entities:
+        #             print(e._id)
+        #         # f.write(f"=== chunk {i} ===\n{pieces[i]}\n\n{entities}\n\n")
+        #         time.sleep(5)
 
+
+    def add_entity(self,result,chunk_id):
+        for e in result.entities:
+            eid = self.entity_id(e.label, e.name)
+            self.kg.execute(type="Entity",node_id=eid,props={"name": e.name, "label": e.label})
+            self.kg.execute(type="Connect",
+                   source_label="Chunk", rel="MENTIONS", target_label="Entity",
+                   source_id=chunk_id, target_id=eid,
+                   props={"mentions": e.mentions})
 
     def connect(self,source_label: Literal["SourceDocument", "Chunk", "Entity"]
                 , target_label:Literal["SourceDocument", "Chunk", "Entity"]
@@ -63,13 +76,13 @@ class KG_Generator:
     def entity_extraction(self,chunk:str):
         prompt = "<chunk>\n"+chunk+"\n</chunk>"
         result =self.llm.send(prompt=prompt,
-                    system_instructions=instructions.ENTITY_EXTRACTION,schema=self.en_ext)
+                    system_instructions=instructions.ENTITY_EXTRACTION,schema=self.en_ext,retry=True)
         
         if result is None:
             raise RuntimeError(f"LLM returned None for chunk: {chunk[:60]!r}")
         output = self.clean(result=result, chunk_text=chunk)
 
-        return output.model_dump_json(indent=2)
+        return output
 
     def chunks(self) -> list[str]:
         chunks = chunk.chunking(self.document,"Recursive")
@@ -80,8 +93,11 @@ class KG_Generator:
         encoded = self.document.encode('utf-8')
         return hashlib.sha256(encoded).hexdigest()
 
+    def entity_id(self,label: str, name: str) -> str:
+        return hashlib.sha256(f"{label}:{name.casefold()}".encode("utf-8")).hexdigest()
 
-    def clean(self,result, chunk_text):
+
+    def clean(self, result, chunk_text):
         kept = []
         for e in result.entities:
             # strip leading article from name and mentions
@@ -91,11 +107,19 @@ class KG_Generator:
             # keep only mentions that are exact substrings of the chunk
             mentions = [m for m in mentions if m in chunk_text]
 
+            # keep only mentions that start with a capital letter (names, not generic nouns)
+            mentions = [m for m in mentions if m[:1].isupper()]
+
             # de-duplicate, keep order
             mentions = list(dict.fromkeys(mentions))
 
             if not mentions:          # drop entities with no valid mention
                 continue
+
+            # the name must be one of the mentions; otherwise use the longest mention
+            if e.name not in mentions:
+                e.name = max(mentions, key=len)
+
             e.mentions = mentions
             kept.append(e)
         result.entities = kept

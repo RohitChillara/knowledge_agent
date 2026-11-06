@@ -66,7 +66,12 @@ class Graph:
             }
             
 
-        self.driver.execute_query(query, parameters_=params, database_="neo4j") 
+        self.driver.execute_query(query, parameters_=params, database_="neo4j")
+
+
+    def get(self, query:str,params:Optional[dict] = None):
+        result = self.driver.execute_query(query,parameters_=params or {}, database_="neo4j")
+        return result
 
 
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 from groq import Groq
 import groq
 from pydantic import BaseModel,ValidationError
@@ -15,7 +16,8 @@ class LLM:
         self.client = Groq(api_key=os.environ["GROQ_API_KEY"],max_retries=3)
         self.retries = 0
 
-    def send[T: BaseModel](self, prompt: str, system_instructions: str, schema: type[T]) -> T:
+    def send[T: BaseModel](self, prompt: str, system_instructions: str, schema: type[T],
+                           retry:Optional[bool] = False) -> T:
         try:
             response=self.client.chat.completions.create(
                 messages=[
@@ -52,7 +54,7 @@ class LLM:
 
             result = schema.model_validate_json(content)
 
-            if getattr(result, "entities", None) == [] and self.retries < 2:
+            if getattr(result, "entities", None) == [] and self.retries < 2 and retry:
                 self.retries += 1
                 return self.send(prompt, system_instructions, schema)
             if getattr(result, "entities", None) == []:

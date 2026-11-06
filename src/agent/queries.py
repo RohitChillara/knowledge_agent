@@ -81,3 +81,105 @@ MATCH ()-[r:RELATED]->()
 RETURN r.predicate AS predicate, count(*) AS n
 ORDER BY n DESC
 """
+
+# --- One-time setup (rerun after every ingest) ---
+
+SET_ALIASES = """
+MATCH (e:Entity)
+OPTIONAL MATCH (:Chunk)-[m:MENTIONS]->(e)
+UNWIND coalesce(m.mentions, []) + [e.name] AS form
+WITH e, collect(DISTINCT form) AS aliases
+SET e.aliases = aliases,
+    e.aliases_lc = [a IN aliases | toLower(a)],
+    e.aliases_text = reduce(s = "", a IN aliases | s + " " + a)
+"""
+
+CREATE_FULLTEXT_INDEX = """
+CREATE FULLTEXT INDEX entity_names IF NOT EXISTS
+FOR (e:Entity) ON EACH [e.name, e.aliases_text]
+"""
+
+# --- Entity lookup ---
+
+# params: text
+EXACT_MATCH = """
+MATCH (e:Entity)
+WHERE toLower($text) IN e.aliases_lc
+RETURN e.id AS id, e.name AS name, e.label AS label
+"""
+
+# params: lucene_query (e.g. "Chesire~ Cat~", Lucene-escaped), min_score, label
+FUZZY_MATCH = """
+MATCH (node:Entity)
+SEARCH node IN (FULLTEXT INDEX entity_names FOR $lucene_query LIMIT 10)
+SCORE AS score
+WITH node, score
+WHERE score >= $min_score
+RETURN node.id AS id, node.name AS name, node.label AS label, score,
+       node.label = $label AS label_match
+ORDER BY label_match DESC, score DESC
+LIMIT 3
+"""
+
+# --- Neighbourhood and traversal ---
+
+# params: ids
+PREDICATE_SUMMARY = """
+MATCH (e:Entity)-[r:RELATED]-(n:Entity)
+WHERE e.id IN $ids
+RETURN e.name AS entity,
+       r.predicate AS predicate,
+       CASE WHEN startNode(r) = e THEN 'out' ELSE 'in' END AS direction,
+       count(*) AS edges,
+       collect(DISTINCT n.name)[..3] AS examples
+ORDER BY entity, edges DESC
+"""
+
+# params: ids, predicates, visited, beam
+FOLLOW_PREDICATES = """
+MATCH (e:Entity)-[r:RELATED]-(n:Entity)
+WHERE e.id IN $ids
+  AND r.predicate IN $predicates
+  AND NOT n.id IN $visited
+RETURN e.name AS from,
+       r.predicate AS predicate,
+       CASE WHEN startNode(r) = e THEN 'out' ELSE 'in' END AS direction,
+       n.id AS to_id, n.name AS to,
+       r.evidence AS evidence, r.chunk_id AS chunk_id
+LIMIT $beam
+"""
+
+# params: a, b
+SHORTEST_PATH = """
+MATCH (a:Entity {id: $a}), (b:Entity {id: $b})
+MATCH p = shortestPath((a)-[:RELATED*..4]-(b))
+RETURN [n IN nodes(p) | n.name] AS names,
+       [r IN relationships(p) | r.predicate] AS predicates,
+       [r IN relationships(p) | r.evidence] AS evidence
+"""
+
+# --- Evidence and fallback ---
+
+# params: chunk_ids
+EVIDENCE_CHUNKS = """
+MATCH (c:Chunk) WHERE c.id IN $chunk_ids
+OPTIONAL MATCH (prev:Chunk)-[:NEXT_CHUNK]->(c)
+OPTIONAL MATCH (c)-[:NEXT_CHUNK]->(next:Chunk)
+RETURN c.id AS id, c.index AS idx, c.text AS text,
+       prev.text AS prev_text, next.text AS next_text
+ORDER BY c.index
+"""
+
+# params: id, k
+CHUNKS_MENTIONING = """
+MATCH (c:Chunk)-[m:MENTIONS]->(e:Entity {id: $id})
+RETURN c.id AS id, c.index AS idx, m.mentions AS mentions, c.text AS text
+ORDER BY c.index
+LIMIT $k
+"""
+
+# params: none
+ALL_PREDICATES = """
+MATCH ()-[r:RELATED]->()
+RETURN collect(DISTINCT r.predicate) AS predicates
+"""
