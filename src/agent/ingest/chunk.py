@@ -7,11 +7,7 @@ from pypdf import PdfReader
 import os
 from dotenv import load_dotenv
 from typing import Literal
-
-
 load_dotenv()
-embeddings = OpenAIEmbeddings(api_key=os.environ["OPENAI_API_KEY"], model="text-embedding-3-small")
-
 
 
 CHUNK_SIZE = 800
@@ -44,17 +40,18 @@ def chunk_prose(text: str) -> list[str]:
 
 
 
-def chunking(document: str, chunking_type : Literal["Recursive","Semantic"]) -> list[str]:
+def chunking(document: str, chunking_type: Literal["Recursive", "Semantic"]) -> list[str]:
+    kind = chunking_types(chunking_type)        # raises ValueError for unknown types
 
-    if chunking_types(chunking_type)==chunking_types.Recursive:
+    if kind == chunking_types.Recursive:
         return chunk_prose(document)
-        
-    elif chunking_types(chunking_type)==chunking_types.Semantic:
-        semantic_splitter=SemanticChunker(embeddings=embeddings,breakpoint_threshold_type="percentile",min_chunk_size=4000)
-        document=semantic_splitter.split_text(document)
-        return document
-    
-    else:
-        raise ValueError(
-            f"Invalid Chunking Method. Supported: Recursive, Semantic"
-        )
+
+    if kind == chunking_types.Semantic:
+        embeddings = OpenAIEmbeddings(api_key=os.environ["OPENAI_API_KEY"],
+                                      model="text-embedding-3-small")
+        semantic_splitter = SemanticChunker(embeddings=embeddings,
+                                            breakpoint_threshold_type="percentile",
+                                            min_chunk_size=4000)
+        return semantic_splitter.split_text(document)
+
+    raise ValueError("Invalid Chunking Method. Supported: Recursive, Semantic")

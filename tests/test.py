@@ -1,33 +1,12 @@
-# from agent.ingest import chunk
-# from pathlib import Path
-# from agent.ingest.kg_generator import KG_Generator as kg
+from agent.ingest import chunk as c
+from agent.ingest.kg_generator import KG_Generator as kg
+import asyncio
 
-# path = Path("/home/rohitchillara/agent/data/alice_ch6-8.txt")
+text = c.load_text("/home/rohitchillara/agent/data/NIAM.txt")
 
-# document = chunk.load_text(path=path)
-
-# sample = kg(document)
-# sample.create_graph()
-
-
-# from agent.db import queries
-
-# print(queries.REL_TYPES)
-
-# text = "mad hatter"
+async def main():
+    async with await kg.create(text,title="NIAM") as kg1:
+        await kg1.pipeline(max_parallel= 2)
 
 
-# words = text.split(' ')
-# words = [w+"~" for w in words]
-# text = " ".join(words)
-
-# print(text)
-
-# from agent.db import graph
-# from agent.db import queries
-
-# A = graph.Graph()
-# test = A.get(query=queries.ALL_PREDICATES)[0][0]["predicates"]
-# print(test)
-
-print("\n".join([]))
+asyncio.run(main())

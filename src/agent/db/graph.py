@@ -1,5 +1,5 @@
-from neo4j import GraphDatabase
-from neo4j.exceptions import Neo4jError
+from neo4j import AsyncGraphDatabase
+from neo4j.exceptions import Neo4jError, ServiceUnavailable
 import os
 from dotenv import load_dotenv
 from typing import Literal, get_args, Optional
@@ -9,24 +9,47 @@ load_dotenv()
 class Connection:
     def __init__(self):
         self.URI = os.environ["NEO4J_URI"]
-        self.auth = (os.environ["DB_USER"],os.environ["DB_PWD"])
+        self.auth = (os.environ["DB_USER"], os.environ["DB_PWD"])
 
-    def connect(self):
+    async def connect(self):
+        driver = AsyncGraphDatabase.driver(self.URI, auth=self.auth)
         try:
-            driver = GraphDatabase.driver(self.URI, auth=self.auth)
-            return driver
-        except Neo4jError as e:
-            driver.close()
-            raise ValueError("Error: "+e)
+            await driver.verify_connectivity()
+        except (Neo4jError, ServiceUnavailable) as e:
+            await driver.close()
+            raise ConnectionError(f"Cannot connect to Neo4j at {self.URI}: {e}") from e
+        return driver
 
 
 class Graph:
     def __init__(self):
         self.db = Connection()
-        self.driver = self.db.connect()
+        self.driver = None
         self.NodeLable = Literal["SourceDocument", "Chunk", "Entity","Connect"]
 
-    def execute(self, type: Literal["SourceDocument", "Chunk", "Entity", "Connect"],
+
+    @classmethod
+    async def create(cls):
+        self = cls()
+        self.driver = await self.db.connect()
+        return self
+
+    async def close(self):
+        if self.driver is not None:
+            await self.driver.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close()
+        return False
+
+    async def get(self, query:str,params:Optional[dict] = None):
+        return await self.driver.execute_query(query,parameters_=params or {}, database_="neo4j")
+            
+
+    async def execute(self, type: Literal["SourceDocument", "Chunk", "Entity", "Connect"],
             node_id: Optional[str] = None, props: Optional[dict] = None,
             source_label: Optional[str] = None, rel: Optional[str] = None,
             target_label: Optional[str] = None, source_id: Optional[str] = None,
@@ -66,12 +89,10 @@ class Graph:
             }
             
 
-        self.driver.execute_query(query, parameters_=params, database_="neo4j")
+        await self.driver.execute_query(query, parameters_=params, database_="neo4j")
 
 
-    def get(self, query:str,params:Optional[dict] = None):
-        result = self.driver.execute_query(query,parameters_=params or {}, database_="neo4j")
-        return result
+    
 
 
 
