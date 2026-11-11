@@ -1,9 +1,9 @@
 from __future__ import annotations
-from agent import llm
-from agent import queries
-from agent import schema
-from agent import instructions
-from agent import graph
+from agent.llm import llm
+from agent.db import queries
+from agent.llm import schema
+from agent.llm import instructions
+from agent.db import graph
 from typing import Literal, Optional
 import re
 
@@ -17,37 +17,53 @@ class Retrieval:
 
     def pipeline(self):
         entities = self.query2entity()
+        print(entities)
         relations, missed = self.getEntity(entities)
         predicates = self.getPreds(relations)
         self.contextAware(entities=relations,predicates=predicates)
 
     def contextAware(self,
                     entities: list[str],
-                    predicates: list[str],
+                    predicates: Optional[list[str]] = None,
                     visited: Optional[set[str]] = None,
                     facts: Optional[list[str]] = None,
                     depth: int = 0):
         system_instructions = instructions.ACTION_INSTRUCTIONS
         structure = schema.RetrievalPlan
-        str_ents = ''
-        str_preds = ''
-        for e in entities:
-            str_ents = ", ".join(e["name"])
-        for p in predicates:
-            str_preds = "\n".join(p)
+        str_ents = "\n".join(f"- {e['name']}" for e in entities)
+        predicates = "\n".join(predicates)
 
         user_prompt = instructions.CONTEXT_AWARE.format(
             prompt = self.prompt,
             entities = str_ents,
-            neighborhood = str_preds,
-            facts = facts or "None",
-            visited = visited or "None"
+            neighborhood = predicates,
+            facts = "\n".join(facts or []) or "None",
+            visited = ", ".join(visited or []) or "None",
+            available = ", ".join(sorted(self.predicate_list))
         )
 
-        result = self.llm.send(prompt=self.prompt,system_instructions=system_instructions,
+        print("### USER PROMPT ####\n"+user_prompt)
+
+        print("\n### RESULT ###\n")
+        result = self.llm.send(prompt=user_prompt,system_instructions=system_instructions,
                                schema=structure)
 
         print(result)
+        if result.action == "enough" and not result.follow:
+            print(result)
+        else:
+            if result.action == "follow" and result.follow:
+                query = queries.FOLLOW_STEPS
+                steps = result["follow"]
+                params = {
+                    "steps" : steps,
+                    "visited" : visited or {},
+                    "beam" : 20
+                }
+                result = self.format_result(self.graph.get(query=query,params=params))
+                print(result)
+
+
 
     def query2entity(self):
         system_instructions = instructions.RETRIEVAL_ENTITY_EXTRACTION
@@ -58,13 +74,38 @@ class Retrieval:
         return result
 
 
+    def vector_seeding(self):
+        embeddings = self.llm.embeddings(self.prompt)
+        query = queries.VECTOR_SEARCH_CHUNKS
+        params = {
+            "query_vector" : embeddings,
+            "k" : 3
+        }
+        result = self.graph.get(query,params)
+        chunk_ids = []
+        for row in result.records:
+            chunk_ids.append(row["id"])
+
+        mentions = queries.ENTITIES_FROM_CHUNKS
+        params = {
+            "chunk_ids" : chunk_ids,
+            "k" : 5
+        }
+        vector_search = self.graph.get(mentions,params)
+        result = schema.QueryEntities(entities=[
+            schema.QueryEntity(text=r["name"], label=r["label"]) for r in vector_search.records
+        ])
+        return result
+
     def getPreds(self, kept: list):
-        print("\n###Predicates###\n")
         pred = queries.PREDICATE_SUMMARY
         record_ids = [record["id"] for record in kept]
 
         result = self.graph.get(query=pred, params={"ids": record_ids})
+        return self.format_result(result)
 
+
+    def format_result(self,result):
         lines = []
         for r in result[0]:
             others = ", ".join(r["examples"])
@@ -79,8 +120,6 @@ class Retrieval:
             if line not in lines:                         # drop duplicate facts
                 lines.append(line)
 
-        for line in lines:
-            print(line)
         return lines
 
 
@@ -133,5 +172,5 @@ class Retrieval:
 
 
 if __name__=="__main__":
-    d = Retrieval("What do the mad hatter, the queen of hearts, the chesire cat and two have in common with the queen?")
+    d = Retrieval("Why did the queen behead the cat?")
     d.pipeline()

@@ -3,7 +3,7 @@ from neo4j.exceptions import Neo4jError
 import os
 from dotenv import load_dotenv
 from typing import Literal, get_args, Optional
-from agent import queries
+from agent.db import queries
 load_dotenv()
 
 class Connection:

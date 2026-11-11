@@ -42,7 +42,9 @@ class FollowStep(BaseModel):
 
 class RetrievalPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["enough", "follow", "cypher"]
+    analysis: str              # think here first, step by step
+    action: Literal["enough", "follow", "cypher", "unanswerable"]
     reason: str
-    follow: list[FollowStep]  # empty unless action == "follow"
-    cypher: str               # "" unless action == "cypher
+    evidence: list[str]
+    follow: list[FollowStep]
+    cypher: str

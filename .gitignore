@@ -12,6 +12,9 @@ wheels/
 #secrets
 .env 
 
+# run artefacts
+outputs/
+
 *.pdf
 
 *.txt

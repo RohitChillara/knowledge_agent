@@ -1,11 +1,11 @@
 from __future__ import annotations
 from typing import Optional, Literal
-from agent import llm
-from agent import schema
-from agent import instructions
-from agent import chunk
-from agent import graph
-from agent.queries import NODE_LABELS, REL_TYPES
+from agent.llm import llm
+from agent.llm import schema
+from agent.llm import instructions
+from agent.ingest import chunk
+from agent.db import graph
+from agent.db.queries import NODE_LABELS, REL_TYPES
 import hashlib
 import time
 import re
@@ -40,14 +40,6 @@ class KG_Generator:
                                          target_id=chunk_id,rel="NEXT_CHUNK")
             self.add_entity(entities,chunk_id)
             time.sleep(5)
-    
-        # with open("review.txt","w",encoding="utf-8") as f:
-        #     for i in range(2):
-        #         entities = self.entity_extraction(pieces[i])
-        #         for e in entities:
-        #             print(e._id)
-        #         # f.write(f"=== chunk {i} ===\n{pieces[i]}\n\n{entities}\n\n")
-        #         time.sleep(5)
 
 
     def add_entity(self,result,chunk_id):
