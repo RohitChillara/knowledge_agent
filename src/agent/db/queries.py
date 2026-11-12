@@ -237,3 +237,31 @@ MERGE (a)-[r:RELATED {predicate: row.predicate, chunk_id: $chunk_id}]->(b)
 SET r.evidence = row.evidence, r.grounded = row.grounded
 RETURN count(r) AS n
 """
+
+MERGE_NODES ="""
+MATCH (s:Entity {label: 'PERSON'}) WHERE NOT s.name CONTAINS ' '
+MATCH (f:Entity {label: 'PERSON'})
+WHERE f.name CONTAINS ' ' AND toLower(last(split(f.name, ' '))) = toLower(s.name)
+WITH s, collect(f) AS fulls
+WHERE size(fulls) = 1
+WITH s, fulls[0] AS f
+CALL (s, f) {
+  MATCH (c:Chunk)-[m:MENTIONS]->(s)
+  MERGE (c)-[m2:MENTIONS]->(f)
+  SET m2.mentions = coalesce(m2.mentions, []) +
+      [x IN m.mentions WHERE NOT x IN coalesce(m2.mentions, [])]
+}
+CALL (s, f) {
+  MATCH (s)-[r:RELATED]->(o) WHERE o <> f
+  MERGE (f)-[r2:RELATED {predicate: r.predicate, chunk_id: r.chunk_id}]->(o)
+  ON CREATE SET r2.evidence = r.evidence, r2.grounded = r.grounded
+  ON MATCH SET r2.grounded = CASE WHEN r.grounded > r2.grounded THEN r.grounded ELSE r2.grounded END
+}
+CALL (s, f) {
+  MATCH (o)-[r:RELATED]->(s) WHERE o <> f
+  MERGE (o)-[r2:RELATED {predicate: r.predicate, chunk_id: r.chunk_id}]->(f)
+  ON CREATE SET r2.evidence = r.evidence, r2.grounded = r.grounded
+  ON MATCH SET r2.grounded = CASE WHEN r.grounded > r2.grounded THEN r.grounded ELSE r2.grounded END
+}
+DETACH DELETE s
+RETURN count(*) AS merged"""
