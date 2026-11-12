@@ -17,6 +17,7 @@ ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
 TITLE = re.compile(r"^((dr|prof|mr|mrs|ms|sir|dame)\.?\s+)+", re.IGNORECASE)
 
 BRACKET_ABBR = re.compile(r"\s*\(([A-Z][A-Za-z0-9&.\-]{1,12})\)\s*$")
+COMMA_ABBR = re.compile(r",\s*((?=(?:[a-z]*[A-Z]){2})[A-Za-z]{2,8})$")
 
 POSSESSIVE = re.compile(r"[’']s(\s|$)")
 
@@ -122,6 +123,7 @@ class KG_Generator:
 
     async def after(self):
         """Post-ingest step (aliases for retrieval) and a check report."""
+        await self.kg.get(query=queries.MERGE_NODES)
         await self.kg.get(query=queries.SET_ALIASES)
 
         p = {"doc_id": self.doc_id}
@@ -271,11 +273,11 @@ class KG_Generator:
 
     @staticmethod
     def _normalise(text: str) -> tuple[str, str | None]:
-        """Strip article and titles; split off a trailing (ABBR). Returns (name, abbr or None)."""
+        """Strip article and titles; split off a trailing (ABBR) or ', ABBR'. Returns (name, abbr or None)."""
         text = ARTICLE.sub("", text.strip())
         text = TITLE.sub("", text)
         abbr = None
-        m = BRACKET_ABBR.search(text)
+        m = BRACKET_ABBR.search(text) or COMMA_ABBR.search(text)
         if m:
             abbr = m.group(1)
             text = text[:m.start()]
@@ -393,8 +395,8 @@ class KG_Generator:
 
             predicate = t.predicate.strip().lower().replace(" ", "_").replace("-", "_")
             predicate = PREDICATE_CHARS.sub("", predicate).strip("_")
-            if not predicate:
-                continue
+            if not predicate or predicate == "also_called":
+                continue 
 
             key = (subj_name, predicate, obj_name)
             if key in seen:

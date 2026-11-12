@@ -147,15 +147,29 @@ PREDICATE
   subject's side: leads, director_of, works_at, member_of, funds,
   partners_with, subsidiary_of, located_in, belongs_to.
 - Prefer one of these predicates when it fits: leads, director_of, works_at,
-  member_of, part_of, funds, partners_with, collaborates_with, supplies,
-  located_in, belongs_to, reports_to, subsidiary_of, author_of.
-  Create a new predicate only if none of these fits. Use at most 3 words.
+  studied_at, visited, member_of, part_of, funds, partners_with,
+  collaborates_with, supplies, located_in, belongs_to, reports_to,
+  subsidiary_of, author_of.
+  Create a new predicate only if none of these fits. Use at most 4 words.
 - A verb or verb phrase of 1 to 4 words, in present tense.
 - Prefer general, reusable predicates over very specific ones: "funds" rather
   than "provides_multi_year_funding_for".
 - Choose the predicate that matches the stated role: "director_of" for a
   director, "leads" for the head of a unit, "member_of" or "works_at" for
   staff.
+- Use "works_at" only when the chunk states that the subject is employed by,
+  works for, or holds a position at the object. Being mentioned in the same
+  sentence, meeting, or talking about an organisation is not employment.
+- A degree, studies or training at an institution is "studied_at", not
+  "works_at". A trip, stay or visit is "visited" or "travelled_to", not
+  "works_at".
+- "works_at" and "leads" need an organisation or unit as the object, never a
+  city, country or other place. Use "located_in" for places.
+- "leads" requires that the chunk states the subject heads or leads exactly
+  the object. Leading a group whose members come from an organisation is not
+  leading that organisation.
+- "partners_with" connects two organisations or people, never a place. If the
+  text names a place in place of its institutions, skip the relation.
 - Use the same predicate for the same kind of relation throughout.
 - Direction matters: in (A, predicate, B), A does it to B, or A has the stated
   relation to B.
