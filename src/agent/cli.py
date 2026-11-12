@@ -10,8 +10,8 @@ from agent.ingest.kg_generator import KG_Generator
 async def run_ingest(args):
     text = chunk.load_text(args.path)
     title = args.title or args.path.stem
-    async with await KG_Generator.create(text, title=title) as kg:
-        await kg.pipeline(max_parallel=args.parallel)
+    async with await KG_Generator.create(text, title=title, max_parallel=args.parallel) as kg:
+        await kg.pipeline()
 
 
 parser = argparse.ArgumentParser(prog="agent", description="A knowledge agent")
