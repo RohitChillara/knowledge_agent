@@ -12,17 +12,6 @@ class Enitity_extraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     entities: list[Entity]
 
-
-class Triples(BaseModel):
-    model_config=ConfigDict(extra='forbid')
-    triple: str
-    source_span: str
-
-class Triple_Extraction(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    triples: list[Triples]
-
-
 class QueryEntity(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str
@@ -48,3 +37,16 @@ class RetrievalPlan(BaseModel):
     evidence: list[str]
     follow: list[FollowStep]
     cypher: str
+
+
+class Triple(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    subject: str
+    predicate: str
+    object: str
+    evidence: str
+
+
+class TripleResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    triples: list[Triple]

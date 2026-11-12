@@ -82,6 +82,12 @@ RETURN r.predicate AS predicate, count(*) AS n
 ORDER BY n DESC
 """
 
+# Expect one row: (1536, chunk_count). A second row or null dims = missing embeddings.
+CHECK_EMBEDDINGS = """
+MATCH (c:Chunk)
+RETURN size(c.embedding) AS dims, count(*) AS chunks
+"""
+
 # --- One-time setup (rerun after every ingest) ---
 
 SET_ALIASES = """
@@ -97,6 +103,16 @@ SET e.aliases = aliases,
 CREATE_FULLTEXT_INDEX = """
 CREATE FULLTEXT INDEX entity_names IF NOT EXISTS
 FOR (e:Entity) ON EACH [e.name, e.aliases_text]
+"""
+
+# dimension must match the embedding model (text-embedding-3-small: 1536)
+CREATE_VECTOR_INDEX = """
+CREATE VECTOR INDEX chunk_embeddings IF NOT EXISTS
+FOR (c:Chunk) ON c.embedding
+OPTIONS {indexConfig: {
+  `vector.dimensions`: 1536,
+  `vector.similarity_function`: 'cosine'
+}}
 """
 
 # --- Entity lookup ---
@@ -211,4 +227,13 @@ SCORE AS score
 RETURN c.id AS id, c.index AS idx, c.chapter AS chapter, score,
        left(c.text, 80) AS start
 ORDER BY score DESC
+"""
+
+
+CONNECT_RELATED = """
+UNWIND $rows AS row
+MATCH (a:Entity {id: row.source_id}), (b:Entity {id: row.target_id})
+MERGE (a)-[r:RELATED {predicate: row.predicate, chunk_id: $chunk_id}]->(b)
+SET r.evidence = row.evidence, r.grounded = row.grounded
+RETURN count(r) AS n
 """

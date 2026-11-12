@@ -1,0 +1,38 @@
+services:
+  neo4j:
+    image: neo4j:community
+    container_name: neo4j-community
+    restart: unless-stopped
+    ports:
+      - "7474:7474"     # Browser
+      - "7687:7687"     # Bolt
+    environment:
+      # user must be "neo4j" on Community; password comes from DB_PWD in .env
+      NEO4J_AUTH: neo4j/${DB_PWD}
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#neo4j/}\" 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  agent:
+    build: .
+    env_file: .env
+    environment:
+      # inside the compose network, Neo4j is reached by its service name, not localhost
+      NEO4J_URI: bolt://neo4j:7687
+      AGENT_CACHE_DIR: /agent/cache
+    volumes:
+      - ./data:/agent/data
+      - ./cache:/agent/cache
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    # one-off commands: docker compose run --rm agent ingest data/NIAM.txt --title NIAM
+    profiles: ["cli"]
+
+volumes:
+  neo4j_data:

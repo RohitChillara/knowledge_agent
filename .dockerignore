@@ -11,3 +11,10 @@ wheels/
 
 #secrets
 .env 
+
+# run artefacts and local data (mounted as volumes instead)
+cache/
+outputs/
+data/
+graphs/
+tests/
